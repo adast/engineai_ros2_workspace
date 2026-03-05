@@ -18,21 +18,13 @@ class RlBasicParam {
   std::vector<std::string> active_joint_names;
   int num_actions;
   int num_include_obs_steps;
-  double remote_command_sampling_frequency;
-  double remote_command_cut_off_frequency;
   // Observation parameters
-  double observation_scale_linear_vel;
   double observation_scale_angular_vel;
   double observation_scale_dof_pos;
   double observation_scale_dof_vel;
-  double observation_scale_quat;
   double observation_clip;
-  // double observation_scale;
   Eigen::VectorXd observation_scale;
-  Eigen::VectorXd obs_commands_scale;
   Eigen::VectorXi active_joint_idx;
-  // Gait parameters
-  double cycle_time;
   double transition_time;
   // Joint control parameters
   double action_clip;
@@ -41,11 +33,6 @@ class RlBasicParam {
   std::vector<Eigen::VectorXd> joint_kd;
   std::vector<Eigen::VectorXd> action_scale;
   double control_dt;
-  double imu_install_delta_bias;
-  Eigen::Vector3d imu_install_bias;
-
-  bool mix;
-  // Sim to real fine tune parameters
   Eigen::Vector3d command_scale;
 
  private:

@@ -22,18 +22,12 @@ active_joint_idx:
   [0, 6, 1, 7, 2, 8, 3, 9, 4, 10, 5, 11]
 
 num_include_obs_steps: 5
-mix: False
+
 # observation parameters
-observation_scale_linear_vel: 2.0
 observation_scale_angular_vel: 0.2
 observation_scale_dof_pos: 1.0
 observation_scale_dof_vel: 0.05
-observation_scale_quat: 1.0
 observation_clip: 100.0
-
-# gait parameters
-cycle_time: 0.8  # No longer actively used in network input but kept for logic if needed
-still_ratio: 0.
 
 # joint control parameters
 action_clip: 100.0
@@ -67,19 +61,5 @@ action_scale:
 
 control_dt: 0.02
 
-# sim to real fine tune parameters
-enable_remote_command_lpf: false
-remote_command_sampling_frequency: 50.0
-remote_command_cut_off_frequency: 0.1
 command_scale: [0.5, 0.5, 1.0]
-command_bias: [0.0, 0.0, 0.0]
-linear_vel_delta_bias: 0.001
-angular_vel_delta_bias: 0.001
-imu_install_delta_bias: 0.001
-imu_install_bias: [0,0.015,0]
 transition_time: 0.5
-# # Replaces the following limbs with multiple motion planner
-# replaced_limbs:
-#   - waist
-#   - left_arm
-#   - right_arm

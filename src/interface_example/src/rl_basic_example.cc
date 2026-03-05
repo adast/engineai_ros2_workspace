@@ -69,7 +69,6 @@ class RlBasicRunner : public rclcpp::Node {
 
       // Initialize control variables
       time_ = 0.0;
-      global_phase_ = 0.0;
       is_first_time_ = true;
 
       RCLCPP_INFO(get_logger(), "Starting control loop");
@@ -120,10 +119,6 @@ class RlBasicRunner : public rclcpp::Node {
   }
 
   void CalculateObservation() {
-    // Calculate phase info
-    global_phase_ += param_->control_dt / param_->cycle_time;
-    global_phase_ -= static_cast<int>(global_phase_);
-
     // Get IMU data
     auto imu = message_handler_->GetLatestImu();
     Eigen::Matrix3d R_real =
@@ -236,7 +231,6 @@ class RlBasicRunner : public rclcpp::Node {
 
   // State variables
   double time_;
-  double global_phase_;
   bool is_first_time_;
   Eigen::Vector3d command_;
   Eigen::VectorXd q_real_;

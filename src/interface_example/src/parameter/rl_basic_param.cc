@@ -17,16 +17,15 @@ RlBasicParam::RlBasicParam(const std::string& config_file) {
   observation_scale <<
       Eigen::VectorXd::Constant(3, observation_scale_angular_vel),       // base angular velocity
       Eigen::VectorXd::Constant(3, 1.0),                                 // projected gravity
-      Eigen::VectorXd::Constant(3, 1.0),                                 // commands (scale not typically applied here in new observation order)
-      Eigen::VectorXd::Constant(num_actions, observation_scale_dof_pos), // joint position limits
-      Eigen::VectorXd::Constant(num_actions, observation_scale_dof_vel), // joint velocity
-      Eigen::VectorXd::Ones(num_actions);                                // last joint action
+      Eigen::VectorXd::Constant(3, 1.0),                                 // commands
+      Eigen::VectorXd::Constant(num_actions, observation_scale_dof_pos), // joint positions
+      Eigen::VectorXd::Constant(num_actions, observation_scale_dof_vel), // joint velocities
+      Eigen::VectorXd::Ones(num_actions);                                // last action
 }
 
 void RlBasicParam::LoadFromYaml(const std::string& config_file) {
   try {
     YAML::Node config = YAML::LoadFile(config_file);
-    // mix = config["mix"].as<bool>();
     // Load MLP net parameters
     policy_file = config["policy_file"].as<std::string>();
     num_observations = config["num_observations"].as<int>();
@@ -35,19 +34,11 @@ void RlBasicParam::LoadFromYaml(const std::string& config_file) {
     num_include_obs_steps = config["num_include_obs_steps"].as<int>();
 
     // Load observation parameters
-    observation_scale_linear_vel = config["observation_scale_linear_vel"].as<double>();
     observation_scale_angular_vel = config["observation_scale_angular_vel"].as<double>();
     observation_scale_dof_pos = config["observation_scale_dof_pos"].as<double>();
     observation_scale_dof_vel = config["observation_scale_dof_vel"].as<double>();
-    observation_scale_quat = config["observation_scale_quat"].as<double>();
     observation_clip = config["observation_clip"].as<double>();
-    
-    // Load remote command parameters
-    remote_command_sampling_frequency = config["remote_command_sampling_frequency"].as<double>();
-    remote_command_cut_off_frequency = config["remote_command_cut_off_frequency"].as<double>();
 
-    // Load gait parameters
-    cycle_time = config["cycle_time"].as<double>();
     transition_time = config["transition_time"].as<double>();
     // Load joint control parameters
     action_clip = config["action_clip"].as<double>();
@@ -56,8 +47,6 @@ void RlBasicParam::LoadFromYaml(const std::string& config_file) {
     joint_kd = LoadVectorArrayFromYaml(config["joint_kd"]);
     action_scale = LoadVectorArrayFromYaml(config["action_scale"]);
     control_dt = config["control_dt"].as<double>();
-    imu_install_delta_bias = config["imu_install_delta_bias"].as<double>();
-    imu_install_bias = LoadVectorFromYaml(config["imu_install_bias"]);
     // Load command scale
     auto command_scale_node = config["command_scale"];
     command_scale = Eigen::Vector3d(command_scale_node[0].as<double>(), command_scale_node[1].as<double>(),
