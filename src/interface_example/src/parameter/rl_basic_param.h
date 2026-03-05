@@ -18,8 +18,6 @@ class RlBasicParam {
   std::vector<std::string> active_joint_names;
   int num_actions;
   int num_include_obs_steps;
-  int num_commands;
-  int num_clock_signal;
   double remote_command_sampling_frequency;
   double remote_command_cut_off_frequency;
   // Observation parameters

@@ -13,16 +13,14 @@ RlBasicParam::RlBasicParam(const std::string& config_file) {
   // Initialize observation scale vector with correct size
   observation_scale = Eigen::VectorXd::Zero(num_observations);
 
+  // Order: ang_vel, gravity, commands, jpos, jvel, actions
   observation_scale <<
-      Eigen::VectorXd::Constant(num_actions, observation_scale_dof_pos),  // joint position - joint default position
-      Eigen::VectorXd::Constant(num_actions, observation_scale_dof_vel),  // joint velocity
-      Eigen::VectorXd::Ones(num_actions),                                 // last joint action
-      Eigen::Vector3d::Constant(observation_scale_angular_vel),           // base angular velocity
-      Eigen::Vector3d::Constant(observation_scale_quat);                  // base euler angle xyz
-  obs_commands_scale = Eigen::VectorXd::Zero(num_commands);
-  obs_commands_scale << Eigen::Vector2d::Constant(observation_scale_linear_vel),  // linear velocity command
-      observation_scale_angular_vel;                                          // angular velocity command
-  
+      Eigen::VectorXd::Constant(3, observation_scale_angular_vel),       // base angular velocity
+      Eigen::VectorXd::Constant(3, 1.0),                                 // projected gravity
+      Eigen::VectorXd::Constant(3, 1.0),                                 // commands (scale not typically applied here in new observation order)
+      Eigen::VectorXd::Constant(num_actions, observation_scale_dof_pos), // joint position limits
+      Eigen::VectorXd::Constant(num_actions, observation_scale_dof_vel), // joint velocity
+      Eigen::VectorXd::Ones(num_actions);                                // last joint action
 }
 
 void RlBasicParam::LoadFromYaml(const std::string& config_file) {
@@ -64,8 +62,6 @@ void RlBasicParam::LoadFromYaml(const std::string& config_file) {
     auto command_scale_node = config["command_scale"];
     command_scale = Eigen::Vector3d(command_scale_node[0].as<double>(), command_scale_node[1].as<double>(),
                                     command_scale_node[2].as<double>());
-    num_commands = config["num_commands"].as<int>();
-    num_clock_signal = config["num_clock_signal"].as<int>();
 
   } catch (const YAML::Exception& e) {
     std::cerr << "Error loading YAML file: " << e.what() << std::endl;

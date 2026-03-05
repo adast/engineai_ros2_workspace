@@ -1,4 +1,7 @@
+#include <array>
+#include <cassert>
 #include <chrono>
+#include <numeric>
 #include <memory>
 #include <rclcpp/logging.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -58,7 +61,10 @@ class RlBasicRunner : public rclcpp::Node {
 
       // Initialize MNN model
       mlp_net_ = std::make_unique<math::MnnModel>(config_file_dir_ + "/" + param_->policy_file);
-      mlp_net_observation_.setZero(param_->num_observations, param_->num_include_obs_steps);
+      // History is stored as an array of matrices per term or a flat queue.
+      // Since layout is [ term1_t0..4 | term2_t0..4 | ... ] we can just keep a circular buffer of states and flatten at inference time.
+      // Easiest is to keep a history of single step observations:
+      mlp_net_observation_history_.setZero(param_->num_observations, param_->num_include_obs_steps);
       mlp_net_action_.setZero(param_->num_actions);
 
       // Initialize control variables
@@ -118,75 +124,77 @@ class RlBasicRunner : public rclcpp::Node {
     global_phase_ += param_->control_dt / param_->cycle_time;
     global_phase_ -= static_cast<int>(global_phase_);
 
-
-
     // Get IMU data
     auto imu = message_handler_->GetLatestImu();
     Eigen::Matrix3d R_real =
         Eigen::Quaterniond(imu->quaternion.w, imu->quaternion.x, imu->quaternion.y, imu->quaternion.z)
             .toRotationMatrix();
     Eigen::Vector3d w_real = Eigen::Vector3d(imu->angular_velocity.x, imu->angular_velocity.y, imu->angular_velocity.z);
-    // ZYX顺序的欧拉角（等同于RPY）
-    Eigen::Vector3d euler_xyz = math::CalcRollPitchYawFromRotationMatrix(R_real);
+    
+    // Projected gravity is the negative z-axis of the rotation matrix
+    Eigen::Vector3d projected_gravity = -R_real.row(2).transpose();
 
-    // Stack the observation
+    // Stack the single step observation
     Eigen::VectorXd mlp_net_observation_single = Eigen::VectorXd::Zero(param_->num_observations);
-    // if (param_->mix) {
-    //   mlp_net_observation_single <<                         //  command
-    //       (q_real_ - default_joint_q_)(active_joint_idx_),  //  joint position - joint default position: kDoFs
-    //       qd_real_(active_joint_idx_),                      //  joint velocity: kDoFs
-    //       mlp_net_action_,                                  //  last joint action: kDoFs
-    //       w_real,                                           //  base angular velocity w.r.t base frame: 3
-    //       euler_xyz;                                        //  base euler angle rpy w.r.t base frame: 3
-    // } else {
-    //   mlp_net_observation_single << clock_signal,           //  phase signals: 2
-    //       command_,                                         //  command
-    //       (q_real_ - default_joint_q_)(active_joint_idx_),  //  joint position - joint default position: kDoFs
-    //       qd_real_(active_joint_idx_),                      //  joint velocity: kDoFs
-    //       mlp_net_action_,                                  //  last joint action: kDoFs
-    //       w_real,                                           //  base angular velocity w.r.t base frame: 3
-    //       euler_xyz;                                        //  base euler angle rpy w.r.t base frame: 3
-    // }
-    mlp_net_observation_single << (q_real_ - default_joint_q_)(
-      active_joint_idx_),           //  joint position - joint default position: kDoFs
-      qd_real_(active_joint_idx_),  //  joint velocity: kDoFs
-      mlp_net_action_,              //  last joint action: kDoFs
-      w_real,                       //  base angular velocity w.r.t base frame: 3
-      euler_xyz;                    //  base euler angle rpy w.r.t base frame: 3
-
-  // Scales and clips the observation
+    mlp_net_observation_single << w_real,                           //  base angular velocity w.r.t base frame: 3
+                                  projected_gravity,                //  projected gravity: 3
+                                  command_,                         //  velocity command: 3
+                                  (q_real_ - default_joint_q_)(active_joint_idx_),  //  joint pos: 12
+                                  qd_real_(active_joint_idx_),      //  joint vel: 12
+                                  mlp_net_action_;                  //  last action: 12
 
     // Scale and clip the observation
     mlp_net_observation_single.array() *= param_->observation_scale.array();
     mlp_net_observation_single =
         mlp_net_observation_single.cwiseMax(-param_->observation_clip).cwiseMin(param_->observation_clip);
 
-    // Update the observation buffer
+    // Update the observation buffer (Each column is a timestep, oldest first to newest last)
     if (is_first_time_) {
       is_first_time_ = false;
-      mlp_net_observation_.setZero(param_->num_observations, param_->num_include_obs_steps);
+      mlp_net_observation_history_.setZero(param_->num_observations, param_->num_include_obs_steps);
       mlp_net_action_.setZero(param_->num_actions);
-      mlp_net_observation_.rightCols(1) = mlp_net_observation_single;
+      for (int i = 0; i < param_->num_include_obs_steps; ++i) {
+         mlp_net_observation_history_.col(i) = mlp_net_observation_single;
+      }
     } else {
-      mlp_net_observation_.leftCols(param_->num_include_obs_steps - 1) =
-          mlp_net_observation_.rightCols(param_->num_include_obs_steps - 1);
-      mlp_net_observation_.rightCols(1) = mlp_net_observation_single;
+      mlp_net_observation_history_.leftCols(param_->num_include_obs_steps - 1) =
+          mlp_net_observation_history_.rightCols(param_->num_include_obs_steps - 1);
+      mlp_net_observation_history_.rightCols(1) = mlp_net_observation_single;
     }
   }
 
   void CalculateMotorCommand() {
-    Eigen::Vector2d clock_signal(std::sin(2 * M_PI * global_phase_), std::cos(2 * M_PI * global_phase_));
-    Eigen::VectorXd obs = Eigen::VectorXd::Zero(
-      param_->num_observations * param_->num_include_obs_steps + 
-      param_->num_clock_signal + 
-      param_->num_commands
-    );
-    obs = Eigen::VectorXd::Zero(param_->num_observations * param_->num_include_obs_steps + param_->num_clock_signal + param_->num_commands);
-    obs.head(param_->num_observations * param_->num_include_obs_steps) =
-        Eigen::Map<Eigen::VectorXd>(mlp_net_observation_.transpose().data(), mlp_net_observation_.size());
-    command_.array() *= param_->obs_commands_scale.array();
-    obs.tail(param_->num_clock_signal + param_->num_commands) << clock_signal, command_;
+    // Generate flat observation [ term1_t0..4 | term2_t0..4 | ... ]
+    Eigen::VectorXd obs = Eigen::VectorXd::Zero(param_->num_observations * param_->num_include_obs_steps);
+    int offset = 0;
+    
+    // sizes of terms
+    const int num_joints = static_cast<int>(active_joint_idx_.size());
+    const std::array<int, 6> term_sizes = {
+        3,          // ang_vel
+        3,          // gravity
+        3,          // cmd
+        num_joints, // jpos
+        num_joints, // jvel
+        num_joints  // action
+    };
+    assert(std::accumulate(term_sizes.begin(), term_sizes.end(), 0) == param_->num_observations &&
+           "term_sizes sum must equal num_observations");
 
+    int row_idx = 0;
+    for (int size : term_sizes) {
+      // For each term, we want the values from oldest (t0) to newest (t4).
+      // mlp_net_observation_history_ has t0 at col 0 and t4 at col 4.
+      // We want to flatten this block:
+      // term_t0[0]...term_t0[size-1], term_t1[0]...term_t1[size-1], ..., term_t4[0]...term_t4[size-1]
+      
+      for (int t = 0; t < param_->num_include_obs_steps; ++t) {
+        obs.segment(offset + t * size, size) = mlp_net_observation_history_.block(row_idx, t, size, 1);
+      }
+      
+      offset += size * param_->num_include_obs_steps;
+      row_idx += size;
+    }
 
     // Get MNN output
     mlp_net_action_ = mlp_net_->Inference(obs.cast<float>()).cast<double>();
@@ -223,7 +231,7 @@ class RlBasicRunner : public rclcpp::Node {
 
   // MNN model
   std::unique_ptr<math::MnnModel> mlp_net_;
-  Eigen::MatrixXd mlp_net_observation_;
+  Eigen::MatrixXd mlp_net_observation_history_;
   Eigen::VectorXd mlp_net_action_;
 
   // State variables
