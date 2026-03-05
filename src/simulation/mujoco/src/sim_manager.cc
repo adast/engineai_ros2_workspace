@@ -285,11 +285,7 @@ void SimManager::PhysicsLoop() {
       HandleUILoad();
     }
 
-    if (sim_->run && sim_->busywait) {
-      std::this_thread::yield();
-    } else {
-      std::this_thread::sleep_for(kBusyWaitTime);
-    }
+    mj::Simulate::Clock::time_point wakeup_time = mj::Simulate::Clock::now() + kBusyWaitTime;
 
     {
       const std::unique_lock<std::recursive_mutex> lock(sim_->mtx);
@@ -349,6 +345,8 @@ void SimManager::PhysicsLoop() {
 
           if (stepped) {
             sim_->AddToHistory();
+            wakeup_time = syncCPU + std::chrono::duration_cast<mj::Simulate::Clock::duration>(
+                std::chrono::duration<double>((d_->time - syncSim) * slowdown));
           }
         } else {
           mj_forward(m_, d_);
@@ -356,6 +354,8 @@ void SimManager::PhysicsLoop() {
         }
       }
     }
+
+    std::this_thread::sleep_until(wakeup_time);
   }
 }
 
