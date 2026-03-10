@@ -1,10 +1,13 @@
 #include "ros_interface.h"
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <rclcpp/logging.hpp>
+#include <stdexcept>
 #include <string>
 
 #include "config_loader.h"
@@ -13,7 +16,6 @@
 // Constants
 const int kDofFloatingBase = 6;        // Number of DoF for floating base
 const int kNumFloatingBaseJoints = 7;  // Number of joints for floating base (quaternion + xyz)
-const int kDimQuaternion = 4;          // Dimension of a quaternion
 
 namespace mujoco {
 
@@ -124,33 +126,30 @@ void RosInterface::UpdateSimState(const mjModel* m, mjData* d) {
     }
   }
 
-  // IMU data typically comes from sensors in MuJoCo
-  int index = 0;
+  // IMU quaternion (framequat at imu site)
+  const double qw = d->sensordata[imu_quat_adr_ + 0];
+  const double qx = d->sensordata[imu_quat_adr_ + 1];
+  const double qy = d->sensordata[imu_quat_adr_ + 2];
+  const double qz = d->sensordata[imu_quat_adr_ + 3];
+  imu_msg->quaternion.w = qw;
+  imu_msg->quaternion.x = qx;
+  imu_msg->quaternion.y = qy;
+  imu_msg->quaternion.z = qz;
 
-  // Set IMU quaternion
-  imu_msg->quaternion.w = d->sensordata[index + 0];
-  imu_msg->quaternion.x = d->sensordata[index + 1];
-  imu_msg->quaternion.y = d->sensordata[index + 2];
-  imu_msg->quaternion.z = d->sensordata[index + 3];
-  index += kDimQuaternion;
+  // RPY derived from quaternion (ZYX convention); used by plotjuggler visualization
+  imu_msg->rpy.x = std::atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy));
+  imu_msg->rpy.y = std::asin(std::clamp(2.0 * (qw * qy - qz * qx), -1.0, 1.0));
+  imu_msg->rpy.z = std::atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz));
 
-  // Set RPY values from the sensor data
-  // Assuming the RPY values are the next three values after the quaternion
-  imu_msg->rpy.x = d->sensordata[index + 0];  // Roll
-  imu_msg->rpy.y = d->sensordata[index + 1];  // Pitch
-  imu_msg->rpy.z = d->sensordata[index + 2];  // Yaw
-  index += 3;
+  // Linear acceleration (accelerometer, body frame)
+  imu_msg->linear_acceleration.x = d->sensordata[imu_accel_adr_ + 0];
+  imu_msg->linear_acceleration.y = d->sensordata[imu_accel_adr_ + 1];
+  imu_msg->linear_acceleration.z = d->sensordata[imu_accel_adr_ + 2];
 
-  // Linear acceleration
-  imu_msg->linear_acceleration.x = d->sensordata[index + 0];
-  imu_msg->linear_acceleration.y = d->sensordata[index + 1];
-  imu_msg->linear_acceleration.z = d->sensordata[index + 2];
-  index += 3;
-
-  // Angular velocity
-  imu_msg->angular_velocity.x = d->sensordata[index + 0];
-  imu_msg->angular_velocity.y = d->sensordata[index + 1];
-  imu_msg->angular_velocity.z = d->sensordata[index + 2];
+  // Angular velocity (gyro, body frame)
+  imu_msg->angular_velocity.x = d->sensordata[imu_gyro_adr_ + 0];
+  imu_msg->angular_velocity.y = d->sensordata[imu_gyro_adr_ + 1];
+  imu_msg->angular_velocity.z = d->sensordata[imu_gyro_adr_ + 2];
 
   // Publish messages
   joint_state_pub_->publish(std::move(joint_state_msg));
@@ -160,6 +159,15 @@ void RosInterface::UpdateSimState(const mjModel* m, mjData* d) {
 void RosInterface::SetModelAndData(mjModel* model, mjData* data) {
   model_ = model;
   data_ = data;
+
+  auto lookup = [&](const char* name) {
+    int id = mj_name2id(model, mjOBJ_SENSOR, name);
+    if (id == -1) throw std::runtime_error(std::string("IMU sensor not found in model: ") + name);
+    return model->sensor_adr[id];
+  };
+  imu_quat_adr_  = lookup("imu_quaternion");
+  imu_accel_adr_ = lookup("imu_linear_acceleration");
+  imu_gyro_adr_  = lookup("imu_angular_velocity");
 }
 
 void RosInterface::MotionStateTimerCallback() {

@@ -83,6 +83,11 @@ class RosInterface {
 
   // Flag indicating if we have a floating base robot
   bool is_floating_base_;
+
+  // Cached IMU sensor addresses (set once in SetModelAndData)
+  int imu_quat_adr_  = -1;
+  int imu_accel_adr_ = -1;
+  int imu_gyro_adr_  = -1;
 };
 
 }  // namespace mujoco
