@@ -76,10 +76,33 @@ ament_target_dependencies(rl_basic_example
   interface_protocol
 )
 
+add_executable(rl_mimic_example
+  src/rl_mimic_example.cc
+  ${rl_basic_example_src_files}
+)
+
+target_include_directories(rl_mimic_example
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    ${ENGINEAI_ROBOTICS_THIRD_PARTY}/include
+)
+
+target_link_libraries(rl_mimic_example
+  yaml-cpp::yaml-cpp
+  Eigen3::Eigen
+  ${ENGINEAI_ROBOTICS_THIRD_PARTY}/lib/libMNN.so
+)
+
+ament_target_dependencies(rl_mimic_example
+  rclcpp
+  interface_protocol
+)
+
 install(TARGETS
   hold_joint_status
   joint_test_example
   rl_basic_example
+  rl_mimic_example
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 

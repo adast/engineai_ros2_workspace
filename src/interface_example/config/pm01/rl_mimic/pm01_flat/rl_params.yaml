@@ -1,0 +1,75 @@
+policy_file: "policy.mnn"
+motion_file: "policy_mocap.csv"
+num_observations: 129
+
+active_joint_names:
+  [
+    "j00_hip_pitch_l",
+    "j06_hip_pitch_r",
+    "j12_waist_yaw",
+    "j01_hip_roll_l",
+    "j07_hip_roll_r",
+    "j13_shoulder_pitch_l",
+    "j18_shoulder_pitch_r",
+    "j23_head_yaw",
+    "j02_hip_yaw_l",
+    "j08_hip_yaw_r",
+    "j14_shoulder_roll_l",
+    "j19_shoulder_roll_r",
+    "j03_knee_pitch_l",
+    "j09_knee_pitch_r",
+    "j15_shoulder_yaw_l",
+    "j20_shoulder_yaw_r",
+    "j04_ankle_pitch_l",
+    "j10_ankle_pitch_r",
+    "j16_elbow_pitch_l",
+    "j21_elbow_pitch_r",
+    "j05_ankle_roll_l",
+    "j11_ankle_roll_r",
+    "j17_elbow_yaw_l",
+    "j22_elbow_yaw_r",
+  ]
+
+active_joint_idx:
+  [0, 6, 12, 1, 7, 13, 18, 23, 2, 8, 14, 19, 3, 9, 15, 20, 4, 10, 16, 21, 5, 11, 17, 22]
+
+num_include_obs_steps: 1
+
+# observation parameters
+observation_scale_angular_vel: 1.0
+observation_scale_dof_pos: 1.0
+observation_scale_dof_vel: 1.0
+observation_clip: 100.0
+
+# joint control parameters
+action_clip: 10.0
+default_joint_q:
+  - [-0.24, 0, 0, 0.48, -0.24, 0]
+  - [-0.24, 0, 0, 0.48, -0.24, 0]
+  - [0]
+  - [0, 0, 0, 0, 0]
+  - [0, 0, 0, 0, 0]
+  - [0]
+
+joint_kp:
+  - [150, 100, 100, 150, 30, 30]
+  - [150, 100, 100, 150, 30, 30]
+  - [100]
+  - [100, 100, 100, 100, 100]
+  - [100, 100, 100, 100, 100]
+  - [50]
+
+joint_kd:
+  - [5, 3, 3, 5, 0.3, 0.3]
+  - [5, 3, 3, 5, 0.3, 0.3]
+  - [3]
+  - [3, 3, 3, 3, 3]
+  - [3, 3, 3, 3, 3]
+  - [0.3]
+
+action_scale:
+  - [0.5, 0.5, 0.5, 0.2, 0.2, 1, 1, 0.2, 0.2, 0.2, 0.5, 0.5, 0.5, 0.5, 0.3, 0.3, 0.5, 0.5, 1, 1, 0.2, 0.2, 0.2, 0.2]
+
+control_dt: 0.02
+
+transition_time: 0.5
