@@ -1,25 +1,24 @@
-# mlp net parameters
-policy_file: "policies/isaacsim-basic-05-03-26.mnn"
+policy_file: "policies/policy.mnn"
 num_observations: 45
 
 active_joint_names:
   [
-    "J00_HIP_PITCH_L",
-    "J06_HIP_PITCH_R",
-    "J01_HIP_ROLL_L",
-    "J07_HIP_ROLL_R",
-    "J02_HIP_YAW_L",
-    "J08_HIP_YAW_R",
-    "J03_KNEE_PITCH_L",
-    "J09_KNEE_PITCH_R",
-    "J04_ANKLE_PITCH_L",
-    "J10_ANKLE_PITCH_R",
-    "J05_ANKLE_ROLL_L",
-    "J11_ANKLE_ROLL_R",
+    "j00_hip_pitch_l",
+    "j01_hip_roll_l",
+    "j02_hip_yaw_l",
+    "j03_knee_pitch_l",
+    "j04_ankle_pitch_l",
+    "j05_ankle_roll_l",
+    "j06_hip_pitch_r",
+    "j07_hip_roll_r",
+    "j08_hip_yaw_r",
+    "j09_knee_pitch_r",
+    "j10_ankle_pitch_r",
+    "j11_ankle_roll_r",
   ]
 
 active_joint_idx:
-  [0, 6, 1, 7, 2, 8, 3, 9, 4, 10, 5, 11]
+  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
 
 num_include_obs_steps: 5
 
@@ -30,36 +29,35 @@ observation_scale_dof_vel: 0.05
 observation_clip: 100.0
 
 # joint control parameters
-action_clip: 100.0
+action_clip: 10.0
 default_joint_q:
-  - [-0.24, 0.0, 0.0, 0.48, -0.24, 0.0]
-  - [-0.24, 0.0, 0.0, 0.48, -0.24, 0.0]
-  - [0.0]
-  - [0.0, 0.0, 0.0, 0.0, 0.0]
-  - [0.0, 0.0, 0.0, 0.0, 0.0]
-  - [0.0]
+  - [-0.24, 0, 0, 0.48, -0.24, 0]
+  - [-0.24, 0, 0, 0.48, -0.24, 0]
+  - [0]
+  - [0, 0, 0, 0, 0]
+  - [0, 0, 0, 0, 0]
+  - [0]
 
 joint_kp:
-  - [114.5, 114.5, 99.0, 114.5, 99.0, 99.0]
-  - [114.5, 114.5, 99.0, 114.5, 99.0, 99.0]
-  - [99.0]
-  - [99.0, 99.0, 99.0, 99.0, 99.0]
-  - [99.0, 99.0, 99.0, 99.0, 99.0]
-  - [99.0]
+  - [150, 100, 100, 150, 30, 30]
+  - [150, 100, 100, 150, 30, 30]
+  - [100]
+  - [100, 100, 100, 100, 100]
+  - [100, 100, 100, 100, 100]
+  - [50]
 
 joint_kd:
-  - [9.11, 9.11, 7.88, 9.11, 7.88, 7.88]
-  - [9.11, 9.11, 7.88, 9.11, 7.88, 7.88]
-  - [7.88]
-  - [7.88, 7.88, 7.88, 7.88, 7.88]
-  - [7.88, 7.88, 7.88, 7.88, 7.88]
-  - [7.88]
+  - [5, 3, 3, 5, 0.3, 0.3]
+  - [5, 3, 3, 5, 0.3, 0.3]
+  - [3]
+  - [3, 3, 3, 3, 3]
+  - [3, 3, 3, 3, 3]
+  - [0.3]
 
 action_scale:
-  - [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
-  - [0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+  - [0.5, 0.2, 0.2, 0.5, 0.5, 0.2, 0.5, 0.2, 0.2, 0.5, 0.5, 0.2]
 
 control_dt: 0.02
 
-command_scale: [0.5, 0.5, 1.0]
+command_scale: [1, 0.5, 1]
 transition_time: 0.5
