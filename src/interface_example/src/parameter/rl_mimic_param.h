@@ -38,6 +38,8 @@ class RlMimicParam {
   bool motion_yaw_alignment;
   int motion_start_frame;
   int motion_end_frame;
+  // Safety parameters
+  double anchor_ori_termination_threshold_rad;
 
  private:
   void LoadFromYaml(const std::string& config_file);

@@ -37,7 +37,6 @@ void RlMimicParam::LoadFromYaml(const std::string& config_file) {
     YAML::Node config = YAML::LoadFile(config_file);
     // Load MLP net parameters
     policy_file = config["policy_file"].as<std::string>();
-    motion_file = config["motion_file"].as<std::string>();
     num_observations = config["num_observations"].as<int>();
     active_joint_names = config["active_joint_names"].as<std::vector<std::string>>();
     active_joint_idx = LoadIntVectorFromYaml(config["active_joint_idx"]);
@@ -57,9 +56,16 @@ void RlMimicParam::LoadFromYaml(const std::string& config_file) {
     joint_kd = LoadVectorArrayFromYaml(config["joint_kd"]);
     action_scale = LoadVectorArrayFromYaml(config["action_scale"]);
     control_dt = config["control_dt"].as<double>();
+
+    // Load motion parameters
+    motion_file = config["motion_file"].as<std::string>();
     motion_yaw_alignment = config["motion_yaw_alignment"].as<bool>(true);
     motion_start_frame = config["motion_start_frame"].as<int>(0);
     motion_end_frame = config["motion_end_frame"].as<int>(-1);
+
+    // Load safety parameters
+    anchor_ori_termination_threshold_rad =
+        config["anchor_ori_termination_threshold_rad"].as<double>(0.6);
 
   } catch (const YAML::Exception& e) {
     std::cerr << "Error loading YAML file: " << e.what() << std::endl;

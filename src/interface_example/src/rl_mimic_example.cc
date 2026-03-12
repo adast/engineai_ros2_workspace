@@ -168,6 +168,18 @@ class RlMimicRunner : public rclcpp::Node {
   }
 
  private:
+  // Returns the angle (radians) between the gravity vector projected into the motion
+  // anchor frame and the gravity vector projected into the robot frame.  This is
+  // equivalent to the roll/pitch deviation between the two orientations.
+  double AnchorOriDeviationRad(const Eigen::Quaterniond& q_robot,
+                                const Eigen::Quaterniond& q_motion_aligned) const {
+    static const Eigen::Vector3d kGravity(0.0, 0.0, -1.0);
+    const Eigen::Vector3d motion_proj = q_motion_aligned.inverse() * kGravity;
+    const Eigen::Vector3d robot_proj = q_robot.inverse() * kGravity;
+    const double cos_angle = std::clamp(motion_proj.dot(robot_proj), -1.0, 1.0);
+    return std::acos(cos_angle);
+  }
+
   void ControlCallback() {
     if (message_handler_->GetLatestMotionState()->current_motion_task != "joint_bridge") {
       time_ = 0.0;
@@ -178,6 +190,28 @@ class RlMimicRunner : public rclcpp::Node {
     }
     auto joint_state = message_handler_->GetLatestJointState();
     if (!joint_state) return;
+
+    // Termination: stop policy if motion orientation deviates too far from robot orientation
+    if (!is_first_time_) {
+      auto imu = message_handler_->GetLatestImu();
+      if (!imu) {
+        return;
+      }
+      Eigen::Quaterniond q_robot(imu->quaternion.w, imu->quaternion.x, imu->quaternion.y, imu->quaternion.z);
+      q_robot.normalize();
+      Eigen::Quaterniond q_motion_aligned =
+          yaw_offset_q_.inverse() * motion_loader_.AnchorQuatW(motion_idx_);
+      q_motion_aligned.normalize();
+      const double dev_rad = AnchorOriDeviationRad(q_robot, q_motion_aligned);
+      if (dev_rad > param_->anchor_ori_termination_threshold_rad) {
+        RCLCPP_ERROR(get_logger(),
+                     "Anchor orientation deviation %.3f rad exceeds threshold %.3f rad — terminating. "
+                     "Return the robot to a stable standing pose and re-launch.",
+                     dev_rad, param_->anchor_ori_termination_threshold_rad);
+        control_timer_->cancel();
+        return;
+      }
+    }
 
     UpdateState(joint_state);
     CalculateObservation();
