@@ -1,5 +1,10 @@
 policy_file: "policy.mnn"
+
 motion_file: "policy_mocap.csv"
+motion_yaw_alignment: true
+motion_start_frame: 0
+motion_end_frame: -1
+
 num_observations: 129
 
 active_joint_names:

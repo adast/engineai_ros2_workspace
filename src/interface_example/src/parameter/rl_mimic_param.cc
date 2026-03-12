@@ -57,6 +57,9 @@ void RlMimicParam::LoadFromYaml(const std::string& config_file) {
     joint_kd = LoadVectorArrayFromYaml(config["joint_kd"]);
     action_scale = LoadVectorArrayFromYaml(config["action_scale"]);
     control_dt = config["control_dt"].as<double>();
+    motion_yaw_alignment = config["motion_yaw_alignment"].as<bool>(true);
+    motion_start_frame = config["motion_start_frame"].as<int>(0);
+    motion_end_frame = config["motion_end_frame"].as<int>(-1);
 
   } catch (const YAML::Exception& e) {
     std::cerr << "Error loading YAML file: " << e.what() << std::endl;

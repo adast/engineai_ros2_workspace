@@ -14,7 +14,6 @@ class RlMimicParam {
 
   // MLP net parameters
   std::string policy_file;
-  std::string motion_file;
   int num_observations;
   std::vector<std::string> active_joint_names;
   int num_actions;
@@ -34,6 +33,11 @@ class RlMimicParam {
   std::vector<Eigen::VectorXd> joint_kd;
   std::vector<Eigen::VectorXd> action_scale;
   double control_dt;
+  // Motion parameters
+  std::string motion_file;
+  bool motion_yaw_alignment;
+  int motion_start_frame;
+  int motion_end_frame;
 
  private:
   void LoadFromYaml(const std::string& config_file);

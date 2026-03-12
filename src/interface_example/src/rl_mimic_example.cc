@@ -139,10 +139,23 @@ class RlMimicRunner : public rclcpp::Node {
       mlp_net_ = std::make_unique<math::MnnModel>(config_file_dir_ + "/" + param_->policy_file);
       mlp_net_action_.setZero(param_->num_actions);
 
+      // Resolve motion frame range (-1 means last frame)
+      const int num_frames = motion_loader_.NumFrames();
+      motion_start_frame_ = param_->motion_start_frame;
+      motion_end_frame_ = (param_->motion_end_frame == -1) ? num_frames - 1 : param_->motion_end_frame;
+      if (motion_start_frame_ < 0 || motion_end_frame_ >= num_frames || motion_start_frame_ > motion_end_frame_) {
+        RCLCPP_ERROR(get_logger(), "Invalid frame range [%d, %d] for %d frames", motion_start_frame_,
+                     motion_end_frame_, num_frames);
+        return false;
+      }
+      RCLCPP_INFO(get_logger(), "Motion frame range: [%d, %d] / %d", motion_start_frame_, motion_end_frame_,
+                  num_frames);
+
       // Initialize control variables
       time_ = 0.0;
-      motion_idx_ = 0;
+      motion_idx_ = motion_start_frame_;
       is_first_time_ = true;
+      yaw_offset_q_ = Eigen::Quaterniond::Identity();
 
       RCLCPP_INFO(get_logger(), "Starting control loop");
       control_timer_ = create_wall_timer(std::chrono::duration<double>(param_->control_dt),
@@ -158,8 +171,9 @@ class RlMimicRunner : public rclcpp::Node {
   void ControlCallback() {
     if (message_handler_->GetLatestMotionState()->current_motion_task != "joint_bridge") {
       time_ = 0.0;
-      motion_idx_ = 0;
+      motion_idx_ = motion_start_frame_;
       is_first_time_ = true;
+      yaw_offset_q_ = Eigen::Quaterniond::Identity();
       return;
     }
     auto joint_state = message_handler_->GetLatestJointState();
@@ -171,7 +185,13 @@ class RlMimicRunner : public rclcpp::Node {
     SendMotorCommand();
 
     time_ += param_->control_dt;
-    motion_idx_ = (motion_idx_ + 1) % motion_loader_.NumFrames();
+    if (motion_idx_ >= motion_end_frame_) {
+      motion_idx_ = motion_start_frame_;
+      is_first_time_ = true;
+      yaw_offset_q_ = Eigen::Quaterniond::Identity();
+    } else {
+      ++motion_idx_;
+    }
   }
 
   void UpdateState(const interface_protocol::msg::JointState::SharedPtr& joint_state) {
@@ -180,11 +200,6 @@ class RlMimicRunner : public rclcpp::Node {
   }
 
   void CalculateObservation() {
-    if (is_first_time_) {
-      is_first_time_ = false;
-      mlp_net_action_.setZero(param_->num_actions);
-    }
-
     auto imu = message_handler_->GetLatestImu();
 
     // Robot anchor orientation in world frame (from IMU)
@@ -200,11 +215,33 @@ class RlMimicRunner : public rclcpp::Node {
     const Eigen::VectorXd& ref_joint_pos = motion_loader_.JointPos(motion_idx_);
     const Eigen::VectorXd& ref_joint_vel = motion_loader_.JointVel(motion_idx_);
 
+    if (is_first_time_) {
+      is_first_time_ = false;
+      mlp_net_action_.setZero(param_->num_actions);
+
+      if (param_->motion_yaw_alignment) {
+        // Capture yaw offset so that initial motion yaw == initial robot yaw.
+        // All subsequent mocap frames are rotated by yaw_offset_q_.inverse() to remove
+        // the world-frame yaw difference captured at startup.
+        auto yaw_of = [](const Eigen::Quaterniond& q) {
+          return std::atan2(2.0 * (q.w() * q.z() + q.x() * q.y()),
+                            1.0 - 2.0 * (q.y() * q.y() + q.z() * q.z()));
+        };
+        double yaw_diff = yaw_of(q_motion) - yaw_of(q_robot);
+        yaw_offset_q_ = Eigen::Quaterniond(Eigen::AngleAxisd(yaw_diff, Eigen::Vector3d::UnitZ()));
+        RCLCPP_INFO(get_logger(), "Yaw offset captured: %.4f rad", yaw_diff);
+      }
+    }
+
+    // Remove initial yaw offset from motion reference so q_rel is yaw-invariant at startup
+    Eigen::Quaterniond q_motion_aligned = yaw_offset_q_.inverse() * q_motion;
+    q_motion_aligned.normalize();
+
     // motion_anchor_ori_b:
-    //   q_rel = q_robot.inv * q_motion  (orientation of motion anchor in robot anchor frame)
+    //   q_rel = q_robot.inv * q_motion_aligned  (orientation of motion anchor in robot anchor frame)
     //   Represent as first 2 columns of the rotation matrix, row-interleaved:
     //   [R(0,0), R(0,1), R(1,0), R(1,1), R(2,0), R(2,1)] = 6 values
-    Eigen::Quaterniond q_rel = q_robot.inverse() * q_motion;
+    Eigen::Quaterniond q_rel = q_robot.inverse() * q_motion_aligned;
     q_rel.normalize();
     Eigen::Matrix3d R_rel = q_rel.toRotationMatrix();
     Eigen::VectorXd anchor_ori_b(6);
@@ -274,6 +311,8 @@ class RlMimicRunner : public rclcpp::Node {
   // Motion reference data
   MotionLoader motion_loader_;
   int motion_idx_;
+  int motion_start_frame_;
+  int motion_end_frame_;
 
   // State variables
   double time_;
@@ -287,6 +326,9 @@ class RlMimicRunner : public rclcpp::Node {
   Eigen::VectorXd joint_kp_;
   Eigen::VectorXd joint_kd_;
   Eigen::VectorXd action_scale_;
+
+  // Yaw offset to align initial mocap yaw with initial robot yaw
+  Eigen::Quaterniond yaw_offset_q_;
 
   // ROS timer
   rclcpp::TimerBase::SharedPtr control_timer_;
