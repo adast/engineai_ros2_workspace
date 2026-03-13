@@ -62,6 +62,17 @@ void RlMimicParam::LoadFromYaml(const std::string& config_file) {
     motion_yaw_alignment = config["motion_yaw_alignment"].as<bool>(true);
     motion_start_frame = config["motion_start_frame"].as<int>(0);
     motion_end_frame = config["motion_end_frame"].as<int>(-1);
+    motion_hold_frame = config["motion_hold_frame"].as<int>(-1);
+    auto strategy_str = config["motion_end_strategy"].as<std::string>("hold_frame");
+    if (strategy_str == "loop") {
+      motion_end_strategy = MotionEndStrategy::kLoop;
+    } else if (strategy_str == "hold_frame") {
+      motion_end_strategy = MotionEndStrategy::kHoldFrame;
+    } else if (strategy_str == "terminate") {
+      motion_end_strategy = MotionEndStrategy::kTerminate;
+    } else {
+      throw std::runtime_error("Unknown motion_end_strategy: " + strategy_str);
+    }
 
     // Load safety parameters
     anchor_ori_termination_threshold_rad =

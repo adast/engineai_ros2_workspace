@@ -7,6 +7,12 @@
 
 namespace example {
 
+enum class MotionEndStrategy {
+  kLoop,       // cycle back to start
+  kHoldFrame,  // hold a specific frame index with zero joint velocities (-1 = last frame)
+  kTerminate,  // cancel control timer
+};
+
 class RlMimicParam {
  public:
   explicit RlMimicParam(const std::string& config_file);
@@ -38,6 +44,8 @@ class RlMimicParam {
   bool motion_yaw_alignment;
   int motion_start_frame;
   int motion_end_frame;
+  MotionEndStrategy motion_end_strategy;
+  int motion_hold_frame;
   // Safety parameters
   double anchor_ori_termination_threshold_rad;
 

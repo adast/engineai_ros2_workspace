@@ -138,24 +138,27 @@ class RlMimicRunner : public rclcpp::Node {
       // Initialize MNN model
       mlp_net_ = std::make_unique<math::MnnModel>(config_file_dir_ + "/" + param_->policy_file);
       mlp_net_action_.setZero(param_->num_actions);
+      zero_joint_vel_.setZero(param_->num_actions);
 
       // Resolve motion frame range (-1 means last frame)
       const int num_frames = motion_loader_.NumFrames();
       motion_start_frame_ = param_->motion_start_frame;
       motion_end_frame_ = (param_->motion_end_frame == -1) ? num_frames - 1 : param_->motion_end_frame;
+      motion_hold_frame_idx_ = (param_->motion_hold_frame == -1) ? motion_end_frame_ : param_->motion_hold_frame;
       if (motion_start_frame_ < 0 || motion_end_frame_ >= num_frames || motion_start_frame_ > motion_end_frame_) {
         RCLCPP_ERROR(get_logger(), "Invalid frame range [%d, %d] for %d frames", motion_start_frame_,
                      motion_end_frame_, num_frames);
+        return false;
+      }
+      if (motion_hold_frame_idx_ < 0 || motion_hold_frame_idx_ >= num_frames) {
+        RCLCPP_ERROR(get_logger(), "Invalid motion_hold_frame %d for %d frames", motion_hold_frame_idx_, num_frames);
         return false;
       }
       RCLCPP_INFO(get_logger(), "Motion frame range: [%d, %d] / %d", motion_start_frame_, motion_end_frame_,
                   num_frames);
 
       // Initialize control variables
-      time_ = 0.0;
-      motion_idx_ = motion_start_frame_;
-      is_first_time_ = true;
-      yaw_offset_q_ = Eigen::Quaterniond::Identity();
+      ResetMotionState();
 
       RCLCPP_INFO(get_logger(), "Starting control loop");
       control_timer_ = create_wall_timer(std::chrono::duration<double>(param_->control_dt),
@@ -180,12 +183,17 @@ class RlMimicRunner : public rclcpp::Node {
     return std::acos(cos_angle);
   }
 
+  void ResetMotionState() {
+    time_ = 0.0;
+    motion_idx_ = motion_start_frame_;
+    motion_ended_ = false;
+    is_first_time_ = true;
+    yaw_offset_q_ = Eigen::Quaterniond::Identity();
+  }
+
   void ControlCallback() {
     if (message_handler_->GetLatestMotionState()->current_motion_task != "joint_bridge") {
-      time_ = 0.0;
-      motion_idx_ = motion_start_frame_;
-      is_first_time_ = true;
-      yaw_offset_q_ = Eigen::Quaterniond::Identity();
+      ResetMotionState();
       return;
     }
     auto joint_state = message_handler_->GetLatestJointState();
@@ -219,11 +227,22 @@ class RlMimicRunner : public rclcpp::Node {
     SendMotorCommand();
 
     time_ += param_->control_dt;
-    if (motion_idx_ >= motion_end_frame_) {
-      motion_idx_ = motion_start_frame_;
-      is_first_time_ = true;
-      yaw_offset_q_ = Eigen::Quaterniond::Identity();
-    } else {
+    if (motion_idx_ >= motion_end_frame_ && !motion_ended_) {
+      switch (param_->motion_end_strategy) {
+        case MotionEndStrategy::kLoop:
+          motion_idx_ = motion_start_frame_;
+          is_first_time_ = true;
+          yaw_offset_q_ = Eigen::Quaterniond::Identity();
+          break;
+        case MotionEndStrategy::kHoldFrame:
+          motion_ended_ = true;
+          break;
+        case MotionEndStrategy::kTerminate:
+          RCLCPP_INFO(get_logger(), "Motion ended — terminating.");
+          control_timer_->cancel();
+          break;
+      }
+    } else if (!motion_ended_) {
       ++motion_idx_;
     }
   }
@@ -244,10 +263,13 @@ class RlMimicRunner : public rclcpp::Node {
     Eigen::Vector3d w_real(imu->angular_velocity.x, imu->angular_velocity.y, imu->angular_velocity.z);
 
     // Reference motion data at current time step
-    Eigen::Quaterniond q_motion = motion_loader_.AnchorQuatW(motion_idx_);
+    // kHoldFrame: use a fixed frame's joint positions/orientation with zero velocity
+    const int ref_idx = motion_ended_ ? motion_hold_frame_idx_ : motion_idx_;
+    Eigen::Quaterniond q_motion = motion_loader_.AnchorQuatW(ref_idx);
     q_motion.normalize();
-    const Eigen::VectorXd& ref_joint_pos = motion_loader_.JointPos(motion_idx_);
-    const Eigen::VectorXd& ref_joint_vel = motion_loader_.JointVel(motion_idx_);
+    const Eigen::VectorXd& ref_joint_pos = motion_loader_.JointPos(ref_idx);
+    const Eigen::VectorXd& ref_joint_vel =
+        motion_ended_ ? zero_joint_vel_ : motion_loader_.JointVel(motion_idx_);
 
     if (is_first_time_) {
       is_first_time_ = false;
@@ -341,16 +363,19 @@ class RlMimicRunner : public rclcpp::Node {
   std::unique_ptr<math::MnnModel> mlp_net_;
   Eigen::VectorXd mlp_net_observation_;
   Eigen::VectorXd mlp_net_action_;
+  Eigen::VectorXd zero_joint_vel_;
 
   // Motion reference data
   MotionLoader motion_loader_;
   int motion_idx_;
   int motion_start_frame_;
   int motion_end_frame_;
+  int motion_hold_frame_idx_;
 
   // State variables
   double time_;
   bool is_first_time_;
+  bool motion_ended_;
   Eigen::VectorXd q_real_;
   Eigen::VectorXd qd_real_;
   Eigen::VectorXd q_des_;

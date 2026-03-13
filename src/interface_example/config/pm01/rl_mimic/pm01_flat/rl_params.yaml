@@ -4,6 +4,8 @@ motion_file: "policy_mocap.csv"
 motion_yaw_alignment: true
 motion_start_frame: 0
 motion_end_frame: -1
+motion_end_strategy: "loop" # loop | hold_frame | terminate
+motion_hold_frame: -1       # frame index for hold_frame (-1 = last frame of the clip range)
 
 anchor_ori_termination_threshold_rad: 0.6
 
