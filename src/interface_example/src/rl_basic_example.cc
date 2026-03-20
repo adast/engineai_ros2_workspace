@@ -84,6 +84,12 @@ class RlBasicRunner : public rclcpp::Node {
   }
 
  private:
+  // Returns the angle (radians) between the robot's z-axis and the world vertical (z-up).
+  double TiltFromVerticalRad(const Eigen::Quaterniond& q_robot) const {
+    const Eigen::Vector3d up_world = q_robot * Eigen::Vector3d::UnitZ();
+    return std::acos(std::clamp(up_world.z(), -1.0, 1.0));
+  }
+
   void ControlCallback() {
     if (message_handler_->GetLatestMotionState()->current_motion_task != "joint_bridge") {
       time_ = 0.0;
@@ -92,6 +98,23 @@ class RlBasicRunner : public rclcpp::Node {
     }
     auto joint_state = message_handler_->GetLatestJointState();
     if (!joint_state) return;  // Skip if no joint state received yet
+
+    // Termination: stop policy if robot tilts too far from vertical (disabled when threshold < 0)
+    if (param_->imu_tilt_termination_threshold_rad >= 0.0) {
+      auto imu = message_handler_->GetLatestImu();
+      if (!imu) return;
+      Eigen::Quaterniond q_robot(imu->quaternion.w, imu->quaternion.x, imu->quaternion.y, imu->quaternion.z);
+      q_robot.normalize();
+      const double tilt_rad = TiltFromVerticalRad(q_robot);
+      if (tilt_rad > param_->imu_tilt_termination_threshold_rad) {
+        RCLCPP_ERROR(get_logger(),
+                     "IMU tilt %.3f rad exceeds threshold %.3f rad — terminating. "
+                     "Return the robot to a stable standing pose and re-launch.",
+                     tilt_rad, param_->imu_tilt_termination_threshold_rad);
+        control_timer_->cancel();
+        return;
+      }
+    }
 
     UpdateState(joint_state);
     CalculateObservation();

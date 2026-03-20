@@ -34,6 +34,7 @@ class RlBasicParam {
   std::vector<Eigen::VectorXd> action_scale;
   double control_dt;
   Eigen::Vector3d command_scale;
+  double imu_tilt_termination_threshold_rad;
 
  private:
   void LoadFromYaml(const std::string& config_file);

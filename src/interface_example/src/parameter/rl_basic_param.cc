@@ -47,6 +47,7 @@ void RlBasicParam::LoadFromYaml(const std::string& config_file) {
     joint_kd = LoadVectorArrayFromYaml(config["joint_kd"]);
     action_scale = LoadVectorArrayFromYaml(config["action_scale"]);
     control_dt = config["control_dt"].as<double>();
+    imu_tilt_termination_threshold_rad = config["imu_tilt_termination_threshold_rad"].as<double>(-1.0);
     // Load command scale
     auto command_scale_node = config["command_scale"];
     command_scale = Eigen::Vector3d(command_scale_node[0].as<double>(), command_scale_node[1].as<double>(),
